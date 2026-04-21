@@ -1,6 +1,6 @@
 # Shopify App Store Scraper
 
-Automated scraper that collects app listings from the Shopify App Store every Sunday via GitHub Actions, with optional Railway deployment.
+Automated scraper that collects app listings from the Shopify App Store every Sunday via GitHub Actions, with a FastAPI backend + React frontend for browsing and filtering scraped data.
 
 ---
 
@@ -17,7 +17,33 @@ Automated scraper that collects app listings from the Shopify App Store every Su
 ├── .github/
 │   └── workflows/
 │       └── scrape.yml           # GitHub Actions weekly cron job
-├── data/                        # Scraped CSV output
+├── backend/                     # FastAPI API server
+│   ├── main.py                  # FastAPI app
+│   ├── models.py                # SQLAlchemy ORM models
+│   ├── schemas.py               # Pydantic schemas
+│   ├── crud.py                  # Database operations
+│   ├── database.py              # Neon PostgreSQL connection
+│   ├── import_data.py           # CSV → DB import script
+│   └── requirements.txt         # Backend dependencies
+├── frontend/                    # React frontend (Vite + Tailwind)
+│   ├── src/
+│   │   ├── App.jsx              # Main app + routing
+│   │   ├── api.js               # API client
+│   │   ├── pages/
+│   │   │   ├── Home.jsx         # Landing / stats page
+│   │   │   ├── AppList.jsx      # App explorer with filters
+│   │   │   └── AppDetail.jsx    # Individual app view
+│   │   └── components/
+│   │       ├── DataTable.jsx
+│   │       ├── AdvancedFilterPanel.jsx
+│   │       ├── ColumnSelector.jsx
+│   │       ├── StatsSummaryBar.jsx
+│   │       └── TablePagination.jsx
+│   ├── package.json
+│   ├── vite.config.js
+│   └── tailwind.config.js
+├── data/                        # Scraped CSV output + backups
+│   └── backups/                 # Timestamped CSV archives
 └── README.md
 ```
 
@@ -149,3 +175,163 @@ For a persistent API + Web UI on Railway:
 6. Upsell and Cross-sell
 7. Shipping Solutions
 8. Currency and Translation
+
+---
+
+## Roadmap
+
+> Current status: not started — see [Implementation Order](#implementation-order) below.
+
+### Vision
+
+Automate the full pipeline: **scrape → backup → sync → display**, so the frontend always reflects the latest data and users can see scrape history at a glance.
+
+---
+
+### Phase 1 — Historical CSV Backups `[not started]`
+
+After each scrape, save the full CSV with a timestamped filename instead of overwriting the same file.
+
+**Changes:**
+- `scrape.py` — add `--backup-dir` flag (default: `data/backups/`). After completing a run, copy the output CSV to `data/backups/scrapes/YYYY-MM-DD_HHMMSS_shopify_apps_all_categories.csv`.
+- `.gitignore` — add `data/backups/` so the folder is never committed.
+- `.github/workflows/scrape.yml` — pass `BACKUP_DIR=data/backups` env var through.
+
+---
+
+### Phase 2 — Scrape Log Table `[not started]`
+
+Track every scrape run in the database so the frontend can show history.
+
+**Schema — new table `scrape_runs`:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | SERIAL PK | |
+| `run_at` | TIMESTAMPTZ | When the scrape started |
+| `finished_at` | TIMESTAMPTZ | When the scrape finished |
+| `total_apps_scraped` | INT | Number of rows in this run |
+| `categories_scraped` | INT | Number of categories hit |
+| `status` | VARCHAR | `success`, `failed`, `partial` |
+| `error_message` | TEXT | Error details if failed |
+| `csv_filename` | VARCHAR | Filename in backups dir |
+| `is_latest` | BOOL | True for the most recent run |
+
+---
+
+### Phase 3 — Database Sync Step in GitHub Actions `[not started]`
+
+After the scraper finishes, run the CSV import into Neon PostgreSQL.
+
+**Changes:**
+- `.github/workflows/scrape.yml` — add a new step after "Run scraper" calling `python backend/import_data.py`.
+- `backend/import_data.py` — extend to: (a) insert a `scrape_runs` record, (b) import apps, (c) mark all previous runs as `is_latest=false`, (d) mark this run as `is_latest=true`. Wrap in a transaction so it's atomic.
+- `.env.example` — add `DATABASE_URL` template. Add it as a GitHub Actions secret in repo settings.
+
+**Sync logic:**
+- Match apps by `handle` (upsert — insert new, update existing)
+- Match categories by slug (upsert)
+- For `app_listings`: delete all rows for categories in this scrape, then re-insert
+
+---
+
+### Phase 4 — Scrape Record Page `[not started]`
+
+A new `/scrape-history` page showing the log of all scrape runs.
+
+**UI Elements:**
+- **Header card** — "Latest scrape: Apr 21 2026, 00:00 UTC — 3,030 apps across 8 categories — Success"
+- **Status badge** — Green/Yellow/Red based on `status`
+- **Scrape History table** — Columns: Date, Duration, Apps, Categories, Status. Clickable rows to drill into a specific run.
+- **Manual trigger button** — Button that POSTs to a GitHub Actions `workflow_dispatch` trigger
+
+**New API endpoints:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/scrape-runs` | GET | List all scrape runs, paginated |
+| `/api/scrape-runs/latest` | GET | Get the most recent run |
+| `/api/scrape-runs/{id}/apps` | GET | Get apps from a specific run |
+
+---
+
+### Phase 5 — Home Page Redesign `[not started]`
+
+Replace the current stats dashboard with a richer status overview.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  🏠  Shopify App Explorer                   [Status ●]  │
+├─────────────────────────────────────────────────────────┤
+│  Latest Scrape: Sunday Apr 19 2026 · 3,030 apps         │
+│  [View History]  [Run Now]                             │
+├────────────────┬────────────────────────────────────────┤
+│  Total Apps    │  Categories Tracked                   │
+│  3,030         │  8                                    │
+├────────────────┴────────────────────────────────────────┤
+│  Quick Search: [________________] [Search Apps]         │
+├─────────────────────────────────────────────────────────┤
+│  Categories                                                │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐    │
+│  │ Search & Fil │ │ Sales Channel│ │ Product Rev  │    │
+│  │ 382 apps     │ │ 415 apps     │ │ 295 apps     │    │
+│  └──────────────┘ └──────────────┘ └──────────────┘    │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Changes:**
+- `frontend/src/pages/Home.jsx` — fetch latest run from `/api/scrape-runs/latest` and category counts from `/api/stats`
+- `frontend/src/App.jsx` — add route for `/scrape-history`
+- `frontend/src/api.js` — add `getScrapeRuns()`, `getLatestRun()`, `triggerScrape()`
+
+---
+
+### Phase 6 — "Last Updated" Badges `[not started]`
+
+Show when the app data was last scraped.
+
+- `AppList.jsx` — show "Data from Apr 19 2026" banner at the top using `is_latest` run info
+- `AppDetail.jsx` — add "Last scraped: Apr 19 2026" on the app detail card
+
+---
+
+### Implementation Order
+
+```
+Phase 1  → scrape.py backup + .gitignore      (standalone, no DB)
+Phase 2  → new scrape_runs table + model      (schema only)
+Phase 3  → import_data.py extension + workflow (connects GitHub → DB)
+Phase 4  → new API endpoints + /scrape-history page  (frontend)
+Phase 5  → Home page redesign                 (frontend)
+Phase 6  → "last updated" badges               (frontend)
+```
+
+---
+
+### Architecture
+
+```
+Shopify App Store
+      │ (scrape)
+      ▼
+GitHub Actions (Weekly Cron)
+  ├─ scrape.py → CSV
+  ├─ copy to data/backups/YYYY-MM-DD_*.csv   ← Phase 1
+  └─ import_data.py → Neon PostgreSQL         ← Phase 3
+                    │
+                    ▼
+               Neon PostgreSQL
+                    │
+                    ▼
+            FastAPI Backend (port 8001)
+                    │
+      ┌─────────────┼─────────────┐
+      ▼             ▼             ▼
+  /api/apps   /api/scrape-runs  /api/stats
+                    │
+                    ▼
+            React Frontend
+      ┌─────────────┼─────────────┐
+      ▼             ▼             ▼
+   AppList    ScrapeHistory      Home
+```
