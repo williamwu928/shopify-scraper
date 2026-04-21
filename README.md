@@ -50,6 +50,8 @@ python scrape.py --out data/test.csv --dry-run -v
 python scrape.py --out data/shopify_apps_all_categories.csv --dedupe-global -v
 ```
 
+**Typical runtime:** ~15–30 minutes (8 categories, up to 200 pages each).
+
 ---
 
 ## Configuration
