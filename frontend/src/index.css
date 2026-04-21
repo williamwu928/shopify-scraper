@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  min-height: 100vh;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Table Styles */
+.data-table {
+  @apply w-full border-collapse;
+}
+
+.data-table th {
+  @apply bg-slate-800 text-white font-semibold text-xs uppercase tracking-wider;
+}
+
+.data-table td {
+  @apply border-b border-gray-100;
+}
+
+.data-table tbody tr {
+  @apply transition-colors;
+}
+
+.data-table tbody tr:hover {
+  @apply bg-blue-50;
+}
+
+/* Alternating rows (optional) */
+.data-table tbody tr:nth-child(even) {
+  @apply bg-gray-50;
+}
+
+.data-table tbody tr:nth-child(even):hover {
+  @apply bg-blue-50;
+}
+
+/* Selected row */
+.data-table tbody tr.selected {
+  @apply bg-blue-100;
+}
+
+/* Sortable column header */
+.sortable-header {
+  @apply cursor-pointer select-none;
+}
+
+.sortable-header:hover {
+  @apply bg-slate-700;
+}
+
+/* Filter panel animations */
+.filter-panel {
+  @apply transition-all duration-200;
+}
+
+/* Badge styles */
+.badge-free {
+  @apply bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium;
+}
+
+.badge-shopify {
+  @apply bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-xs font-medium;
+}
+
+.badge-ad {
+  @apply bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs font-medium;
+}
+
+/* Card hover effect */
+.app-card {
+  @apply transition-all duration-200;
+}
+
+.app-card:hover {
+  @apply shadow-lg -translate-y-0.5;
+}
+
+/* Pulse animation for loading */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Stats bar gradient */
+.stats-gradient {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+
+/* Row hover actions */
+.row-actions {
+  @apply opacity-0 transition-opacity;
+}
+
+tr:hover .row-actions {
+  @apply opacity-100;
+}
+
+/* Checkbox styling */
+input[type="checkbox"] {
+  @apply cursor-pointer;
+}
+
+input[type="checkbox"]:checked {
+  @apply bg-blue-600 border-blue-600;
+}
+
+/* Range input styling */
+input[type="range"] {
+  @apply h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  @apply appearance-none w-4 h-4 bg-blue-600 rounded-full cursor-pointer;
+}
+
+/* Number input styling */
+input[type="number"] {
+  @apply font-mono;
+}
+
+/* Modal backdrop */
+.modal-backdrop {
+  @apply fixed inset-0 bg-black bg-opacity-50 z-40;
+}
+
+/* Tooltip */
+.tooltip {
+  @apply absolute z-50 px-2 py-1 text-xs bg-gray-800 text-white rounded shadow-lg;
+}
+
+/* Focus styles */
+input:focus,
+select:focus,
+button:focus {
+  @apply outline-none ring-2 ring-blue-500 ring-offset-1;
+}
+
+/* Smooth transitions */
+* {
+  @apply transition-colors duration-150;
+}
+
+/* Hide scrollbar but keep functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

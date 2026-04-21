@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""
+Scrape Shopify App Store CATEGORY listing pages (low request volume) and output:
+Category Rank | App Name | Reviews | Rating | Link
+
+It parses the exact card format shown in your screenshot: e.g. "4.9 (7,202)".
+
+Run:
+  python3 scrape_shopify_category_counts.py
+
+Output:
+  shopify_category_app_counts.csv
+"""
+
+import csv
+import re
+import time
+from urllib.parse import urljoin, urlparse
+
+import requests
+from bs4 import BeautifulSoup
+
+BASE = "https://apps.shopify.com"
+CATEGORY_URL_TEMPLATE = (
+    "https://apps.shopify.com/categories/marketing-and-conversion-social-trust-product-reviews/all?page={page}"
+)
+
+# This category shows 292 apps (13 pages) in your screenshot.
+MAX_CATEGORY_PAGES = 1     # set to 1 to test
+SLEEP_SECONDS = 2.0         # be polite / reduce rate-limits
+
+HEADERS = {    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+session = requests.Session()
+session.headers.update(HEADERS)
+
+# Match app detail paths like "/air-reviews", "/judgeme", "/loox"
+RE_APP_PATH = re.compile(r"^/[a-z0-9][a-z0-9
