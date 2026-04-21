@@ -178,24 +178,59 @@ For a persistent API + Web UI on Railway:
 
 ---
 
-## Roadmap
+---
 
-> Current status: not started — see [Implementation Order](#implementation-order) below.
+## What Needs to Be Fixed
 
-### Vision
+### Track the CSV in Git
 
-Automate the full pipeline: **scrape → backup → sync → display**, so the frontend always reflects the latest data and users can see scrape history at a glance.
+The `data/` folder was never committed to the repository, so `git diff` finds nothing and the workflow skips every commit. The scraper **is working correctly** — it fetched 3,260 real rows on the last run — but the output file is invisible to git.
+
+**Fix:** Add `data/` to git and commit the current data file. Update `.gitignore` to only exclude `data/backups/` (the timestamped archives), not the main output CSV.
+
+### Fix the Diff Check
+
+The workflow currently uses `git diff --stat | grep "shopify_apps"` to detect changes. This is fragile because:
+- If the file isn't tracked, `git diff` always returns nothing
+- It only detects file changes, not content changes (e.g. a review count going from 100 → 120)
+
+**Fix:** After scraping, count the rows in the new CSV and compare against the committed file. Commit and notify only if the row count or content differs. E.g.:
+
+```bash
+NEW_COUNT=$(wc -l < "$OUTPUT_FILE")
+OLD_COUNT=$(wc -l < "$PREVIOUS_COMMITTED_FILE")
+if [ "$NEW_COUNT" != "$OLD_COUNT" ]; then
+  echo "changed=true" >> $GITHUB_OUTPUT
+fi
+```
+
+### The Scraper Is Working Correctly
+
+The last run scraped **3,260 apps** across 8 categories. This is a real result — the scraper is collecting more data than the stale 3,030 rows in the local CSV. Once the git tracking is fixed, these new results will be committed and the history will be accurate.
 
 ---
 
-### Phase 1 — Historical CSV Backups `[not started]`
+## Roadmap
 
-After each scrape, save the full CSV with a timestamped filename instead of overwriting the same file.
+> Current status: Phase 1 in progress — see [Implementation Order](#implementation-order) below.
+
+### Vision
+
+Automated weekly scrape that commits clean CSV snapshots to GitHub, with a full history preserved via timestamped backups. The pipeline is self-contained (no external storage), easy to audit, and GitHub-native.
+
+---
+
+### Phase 1 — CSV Tracking + Backup `[in progress]`
+
+Fix git tracking, improve the diff check, and add timestamped backups.
 
 **Changes:**
-- `scrape.py` — add `--backup-dir` flag (default: `data/backups/`). After completing a run, copy the output CSV to `data/backups/scrapes/YYYY-MM-DD_HHMMSS_shopify_apps_all_categories.csv`.
-- `.gitignore` — add `data/backups/` so the folder is never committed.
-- `.github/workflows/scrape.yml` — pass `BACKUP_DIR=data/backups` env var through.
+- Add `data/` to git and commit the current `shopify_apps_all_categories.csv`
+- `.gitignore` — keep `data/` tracked, only exclude `data/backups/`
+- `scrape.py` — add `--backup-dir` flag. After each run, copy the output CSV to `data/backups/YYYY-MM-DD_HHMMSS_shopify_apps_all_categories.csv`
+- `.github/workflows/scrape.yml` — fix the diff check to compare row counts instead of `git diff --stat | grep "shopify_apps"`
+
+**Backup naming:** `data/backups/2026-04-21_001530_shopify_apps_all_categories.csv`
 
 ---
 
@@ -214,30 +249,14 @@ Track every scrape run in the database so the frontend can show history.
 | `categories_scraped` | INT | Number of categories hit |
 | `status` | VARCHAR | `success`, `failed`, `partial` |
 | `error_message` | TEXT | Error details if failed |
-| `csv_filename` | VARCHAR | Filename in backups dir |
+| `csv_sha` | VARCHAR | Git SHA of the committed CSV |
 | `is_latest` | BOOL | True for the most recent run |
 
 ---
 
-### Phase 3 — Database Sync Step in GitHub Actions `[not started]`
+### Phase 3 — Scrape Record Page `[not started]`
 
-After the scraper finishes, run the CSV import into Neon PostgreSQL.
-
-**Changes:**
-- `.github/workflows/scrape.yml` — add a new step after "Run scraper" calling `python backend/import_data.py`.
-- `backend/import_data.py` — extend to: (a) insert a `scrape_runs` record, (b) import apps, (c) mark all previous runs as `is_latest=false`, (d) mark this run as `is_latest=true`. Wrap in a transaction so it's atomic.
-- `.env.example` — add `DATABASE_URL` template. Add it as a GitHub Actions secret in repo settings.
-
-**Sync logic:**
-- Match apps by `handle` (upsert — insert new, update existing)
-- Match categories by slug (upsert)
-- For `app_listings`: delete all rows for categories in this scrape, then re-insert
-
----
-
-### Phase 4 — Scrape Record Page `[not started]`
-
-A new `/scrape-history` page showing the log of all scrape runs.
+A `/scrape-history` page showing the log of all scrape runs.
 
 **UI Elements:**
 - **Header card** — "Latest scrape: Apr 21 2026, 00:00 UTC — 3,030 apps across 8 categories — Success"
@@ -255,7 +274,7 @@ A new `/scrape-history` page showing the log of all scrape runs.
 
 ---
 
-### Phase 5 — Home Page Redesign `[not started]`
+### Phase 4 — Home Page Redesign `[not started]`
 
 Replace the current stats dashboard with a richer status overview.
 
@@ -286,7 +305,7 @@ Replace the current stats dashboard with a richer status overview.
 
 ---
 
-### Phase 6 — "Last Updated" Badges `[not started]`
+### Phase 5 — "Last Updated" Badges `[not started]`
 
 Show when the app data was last scraped.
 
@@ -295,15 +314,26 @@ Show when the app data was last scraped.
 
 ---
 
+### Phase 6 — Optional: Sync to Neon `[not started]`
+
+After committing the CSV to GitHub, optionally sync the latest data to Neon PostgreSQL for the web UI. This is a separate concern from the scraper pipeline — the CSV in GitHub is the source of truth.
+
+**Changes:**
+- `.github/workflows/scrape.yml` — add step calling `python backend/import_data.py` after commit
+- `backend/import_data.py` — upsert apps into Neon, mark `is_latest` on `scrape_runs`
+- `.env.example` — add `DATABASE_URL` template, add as a GitHub Actions secret
+
+---
+
 ### Implementation Order
 
 ```
-Phase 1  → scrape.py backup + .gitignore      (standalone, no DB)
-Phase 2  → new scrape_runs table + model      (schema only)
-Phase 3  → import_data.py extension + workflow (connects GitHub → DB)
-Phase 4  → new API endpoints + /scrape-history page  (frontend)
-Phase 5  → Home page redesign                 (frontend)
-Phase 6  → "last updated" badges               (frontend)
+Phase 1  → Fix git tracking + diff check + backup (standalone, no DB)
+Phase 2  → new scrape_runs table + model        (schema only)
+Phase 3  → /scrape-history page + API endpoints (frontend)
+Phase 4  → Home page redesign                  (frontend)
+Phase 5  → "last updated" badges               (frontend)
+Phase 6  → Optional: sync to Neon             (optional extension)
 ```
 
 ---
@@ -315,23 +345,25 @@ Shopify App Store
       │ (scrape)
       ▼
 GitHub Actions (Weekly Cron)
-  ├─ scrape.py → CSV
-  ├─ copy to data/backups/YYYY-MM-DD_*.csv   ← Phase 1
-  └─ import_data.py → Neon PostgreSQL         ← Phase 3
-                    │
-                    ▼
-               Neon PostgreSQL
-                    │
-                    ▼
-            FastAPI Backend (port 8001)
-                    │
-      ┌─────────────┼─────────────┐
-      ▼             ▼             ▼
-  /api/apps   /api/scrape-runs  /api/stats
-                    │
-                    ▼
-            React Frontend
-      ┌─────────────┼─────────────┐
-      ▼             ▼             ▼
-   AppList    ScrapeHistory      Home
+  ├─ scrape.py → data/shopify_apps_all_categories.csv
+  ├─ git commit + push (if row count changed)
+  └─ copy to data/backups/YYYY-MM-DD_*.csv       ← Phase 1
+                │
+                ▼
+           GitHub Repository
+           (CSV source of truth)
+           data/backups/ (local only, not committed)
+                │
+                ▼  (optional)
+           Neon PostgreSQL                         ← Phase 6
+                │
+                ▼
+         FastAPI Backend (port 8001)
+                │
+      ┌─────────┼─────────┐
+      ▼         ▼         ▼
+  /api/apps /api/stats /api/scrape-runs
+                │
+                ▼
+         React Frontend
 ```

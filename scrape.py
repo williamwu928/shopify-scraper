@@ -25,6 +25,7 @@ import csv
 import logging
 import random
 import re
+import shutil
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -44,6 +45,7 @@ from config import (
     REQUEST_TIMEOUT,
     MAX_RETRIES,
     OUTPUT_DIR,
+    BACKUP_DIR,
     ScraperConfig,
 )
 
@@ -383,6 +385,22 @@ def write_csv(rows: List[AppListing], out_path: str) -> None:
     log.info("Wrote %d rows to %s", len(rows), out_path)
 
 
+def create_backup(csv_path: str | Path, backup_dir: str | Path) -> Optional[Path]:
+    csv_path = Path(csv_path)
+    backup_dir = Path(backup_dir)
+    if not csv_path.exists():
+        log.warning("CSV not found at %s — skipping backup", csv_path)
+        return None
+
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H%M%S")
+    backup_name = f"{timestamp}_{csv_path.name}"
+    backup_path = backup_dir / backup_name
+    shutil.copy2(csv_path, backup_path)
+    log.info("Backup saved: %s", backup_path)
+    return backup_path
+
+
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
 def parse_args() -> argparse.Namespace:
@@ -398,6 +416,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--max-delay", type=float, default=MAX_DELAY, help=f"Max delay between pages in seconds (default: {MAX_DELAY})")
     ap.add_argument("--dedupe-global", action="store_true", help="Deduplicate apps globally across all categories")
     ap.add_argument("--dry-run", action="store_true", help="Fetch only the first page of each category (for testing)")
+    ap.add_argument("--backup-dir", default=str(BACKUP_DIR), help=f"Directory for timestamped CSV backups (default: {BACKUP_DIR})")
     ap.add_argument("--list-categories", action="store_true", help="Print default category URLs and exit")
     ap.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
     return ap.parse_args()
@@ -417,6 +436,7 @@ def main() -> int:
         min_delay=args.min_delay,
         max_delay=args.max_delay,
         max_pages=args.max_pages,
+        backup_dir=Path(args.backup_dir),
     )
 
     if args.urls:
@@ -469,6 +489,7 @@ def main() -> int:
         log.warning("Interrupted by user. Saving collected data...")
         if all_rows:
             write_csv(all_rows, args.out)
+            create_backup(args.out, cfg.backup_dir)
         return 130
 
     except Exception as e:
@@ -483,6 +504,7 @@ def main() -> int:
         return 1
 
     write_csv(all_rows, args.out)
+    create_backup(args.out, cfg.backup_dir)
     log.info("")
     log.info("=== Done! Scraped %d apps from %d categories ===", len(all_rows), len(category_urls))
     return 0

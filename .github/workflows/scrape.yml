@@ -30,9 +30,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OUTPUT_DIR: data
+          BACKUP_DIR: data/backups
         run: |
           python scrape.py \
             --out data/shopify_apps_all_categories.csv \
+            --backup-dir data/backups \
             --dedupe-global \
             --verbose
 
@@ -41,19 +43,42 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          if git diff --stat | grep -q "shopify_apps"; then
+
+          OUTPUT_FILE="data/shopify_apps_all_categories.csv"
+
+          if [ ! -f "$OUTPUT_FILE" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
+            echo "reason=new_file" >> $GITHUB_OUTPUT
+            echo "new_count=0" >> $GITHUB_OUTPUT
+            echo "No output file — scrape may have failed."
+            exit 0
+          fi
+
+          NEW_COUNT=$(wc -l < "$OUTPUT_FILE")
+          echo "new_count=$NEW_COUNT" >> $GITHUB_OUTPUT
+
+          # Get row count from the previously committed version (if it exists)
+          OLD_COUNT=$(git show HEAD:"$OUTPUT_FILE" 2>/dev/null | wc -l)
+          echo "old_count=$OLD_COUNT" >> $GITHUB_OUTPUT
+
+          if [ "$NEW_COUNT" != "$OLD_COUNT" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "reason=row_count_changed" >> $GITHUB_OUTPUT
+            echo "Data changed: $OLD_COUNT rows -> $NEW_COUNT rows. Will commit."
           else
             echo "changed=false" >> $GITHUB_OUTPUT
+            echo "reason=no_change" >> $GITHUB_OUTPUT
+            echo "No change detected ($OLD_COUNT rows). Skipping commit."
           fi
 
       - name: Commit and push (if changed)
         if: steps.changed.outputs.changed == 'true'
         run: |
-          git add data/
-          git commit -m "chore: weekly scrape $(date +%Y-%m-%d)"
+          echo "Committing ${{ steps.changed.outputs.new_count }} rows..."
+          git add data/shopify_apps_all_categories.csv
+          git commit -m "chore: weekly scrape $(date +%Y-%m-%d) (${{ steps.changed.outputs.new_count }} apps)"
           git push
 
-      - name: No changes
+      - name: Done
         if: steps.changed.outputs.changed == 'false'
-        run: echo "No new data — skipping commit."
+        run: echo "No new data — nothing to commit."

@@ -19,6 +19,7 @@ import os
 BASE_DIR = Path(__file__).parent.resolve()
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "data"))
 OUTPUT_DIR.mkdir(exist_ok=True)
+BACKUP_DIR = Path(os.getenv("BACKUP_DIR", OUTPUT_DIR / "backups"))
 
 
 # ─── Scraping defaults ─────────────────────────────────────────────────────────
@@ -60,6 +61,7 @@ class ScraperConfig:
     request_timeout: int = REQUEST_TIMEOUT
     max_retries: int = MAX_RETRIES
     output_dir: Path = OUTPUT_DIR
+    backup_dir: Path = BACKUP_DIR
     default_categories: list = None
 
     def __post_init__(self):

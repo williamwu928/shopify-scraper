@@ -24,6 +24,11 @@ env/
 # Logs
 *.log
 
+# Scraped CSV backups (timestamped archives — never commit these)
+data/backups/*
+# …except keep the directory itself tracked
+!data/backups/.gitkeep
+
 # OS files
 .DS_Store
 Thumbs.db
