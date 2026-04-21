@@ -11,6 +11,8 @@ jobs:
   scrape:
     name: Scrape & Commit
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to push commits back to the repo
 
     steps:
       - name: Checkout repository
