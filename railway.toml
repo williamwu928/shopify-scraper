@@ -1,0 +1,8 @@
+[railway]
+  plugin = railway-plugin-git-deploy
+
+[build]
+  builder = "DOCKERFILE"
+
+[deploy]
+  startCommand = "python scrape.py --out data/shopify_apps_all_categories.csv --dedupe-global"
