@@ -1,8 +1,15 @@
 [railway]
-  plugin = railway-plugin-git-deploy
+  plugin = "railway-plugin-git-deploy"
 
 [build]
   builder = "DOCKERFILE"
 
 [deploy]
-  startCommand = "python scrape.py --out data/shopify_apps_all_categories.csv --dedupe-global"
+  # Required environment variables:
+  # DATABASE_URL  - Neon PostgreSQL connection string (postgresql://user:pass@host/db?sslmode=require)
+  # API_KEY       - Secret key for authenticating write operations (POST/DELETE to /api/scrape-runs)
+  # RAILWAY_PUBLIC_URL - Auto-injected by Railway, used for CORS
+  startCommand = "python -c \"import sys; sys.path.insert(0, '/app'); from backend.main import app; import uvicorn; uvicorn.run(app, host='0.0.0.0', port=8001)\""
+  healthcheckPath = "/api/health"
+  restartPolicyType = "ON_FAILURE"
+  restartPolicyMaxRetries = 10

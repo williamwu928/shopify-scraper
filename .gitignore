@@ -20,6 +20,7 @@ env/
 # Environment variables
 .env
 .env.local
+.env.production
 
 # Logs
 *.log
@@ -32,3 +33,14 @@ data/backups/*
 # OS files
 .DS_Store
 Thumbs.db
+
+# Debug files
+debug.html
+debug.png
+
+# Backend helper scripts (development only, not for deployment)
+backend/debug_db.py
+backend/cleanup_and_seed.py
+backend/test_api.py
+backend/reimport_csv.py
+backend/migrate_csv_sha.py

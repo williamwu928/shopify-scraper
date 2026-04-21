@@ -1,5 +1,8 @@
-from fastapi import FastAPI, Depends, Query
+import os
+from fastapi import FastAPI, Depends, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 import crud
@@ -8,15 +11,37 @@ from database import get_db
 
 app = FastAPI(title="Shopify Apps API", version="1.0.0")
 
-# CORS
+# ── API Key Authentication ────────────────────────────────────────────────────
+_API_KEY = os.getenv("API_KEY")
+
+
+def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+    """Dependency to verify API key for protected endpoints."""
+    if not _API_KEY:
+        raise ValueError("API_KEY environment variable is not configured on the server.")
+    if x_api_key != _API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return x_api_key
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+_railway_url = os.getenv("RAILWAY_PUBLIC_URL", "")
+_allowed_origins = [_railway_url, "http://localhost:5173", "http://localhost:3000"]
+_allowed_origins = [o for o in _allowed_origins if o]
+
+if not _allowed_origins:
+    raise ValueError(
+        "No allowed origins configured. Set RAILWAY_PUBLIC_URL or add frontend URLs."
+    )
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ── API routes ─────────────────────────────────────────────────────────────────
 
 @app.get("/api/categories", response_model=list[schemas.CategoryResponse])
 def list_categories(db: Session = Depends(get_db)):
@@ -60,9 +85,65 @@ def get_stats(db: Session = Depends(get_db)):
     return crud.get_stats(db)
 
 
+@app.post("/api/scrape-runs", response_model=schemas.ScrapeRunResponse, status_code=201)
+def create_scrape_run(data: schemas.ScrapeRunCreate, db: Session = Depends(get_db), _auth: str = Depends(verify_api_key)):
+    return crud.create_scrape_run(db, data)
+
+
+@app.get("/api/scrape-runs", response_model=schemas.ScrapeRunListResponse)
+def list_scrape_runs(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    return crud.get_scrape_runs(db, page=page, page_size=limit)
+
+
+@app.get("/api/scrape-runs/latest", response_model=schemas.ScrapeRunResponse)
+def get_latest_scrape_run(db: Session = Depends(get_db)):
+    run = crud.get_latest_scrape_run(db)
+    if not run:
+        raise HTTPException(status_code=404, detail="No scrape runs found")
+    return run
+
+
+@app.delete("/api/scrape-runs/{run_id}", status_code=204)
+def delete_scrape_run(run_id: int, db: Session = Depends(get_db), _auth: str = Depends(verify_api_key)):
+    deleted = crud.delete_scrape_run(db, run_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Scrape run not found")
+
+
+@app.get("/api/scrape-runs/{run_id}", response_model=schemas.ScrapeRunResponse)
+def get_scrape_run(run_id: int, db: Session = Depends(get_db)):
+    run = crud.get_scrape_run_by_id(db, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Scrape run not found")
+    return schemas.ScrapeRunResponse.model_validate(run)
+
+
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+
+
+# ── Frontend static files ──────────────────────────────────────────────────────
+# Mount the built React app at /frontend/dist
+_frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+if os.path.isdir(_frontend_dist):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="assets")
+
+
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """
+    SPA fallback: serve index.html for any non-API route.
+    This lets React Router handle client-side routing.
+    """
+    _index = os.path.join(_frontend_dist, "index.html")
+    if os.path.isfile(_index):
+        return FileResponse(_index)
+    return {"error": "Frontend not built yet"}
 
 
 if __name__ == "__main__":

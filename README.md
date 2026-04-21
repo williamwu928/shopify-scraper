@@ -1,5 +1,10 @@
 # Shopify App Store Scraper
 
+[![Live](https://img.shields.io/badge/Live-Railway-4B44CC?logo=railway)](https://shopify-scraper-production-038d.up.railway.app)
+[![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-Weekly%20Scrape-Green?logo=github)](https://github.com/WilliamWu125/Ingredient-Demo/actions)
+
+**Live at:** [https://shopify-scraper-production-038d.up.railway.app](https://shopify-scraper-production-038d.up.railway.app)
+
 Automated scraper that collects app listings from the Shopify App Store every Sunday via GitHub Actions, with a FastAPI backend + React frontend for browsing and filtering scraped data.
 
 ---
@@ -130,11 +135,27 @@ To trigger manually:
 
 ### Railway Deployment
 
-1. Create account at [railway.app](https://railway.app)
-2. **New Project** → **Deploy from GitHub** → select `shopify-scraper`
-3. Railway auto-detects `Dockerfile` and `railway.toml`
-4. Add environment variables in Railway dashboard if needed
-5. Railway provides a public URL (optional — scraper runs on a schedule via GitHub Actions)
+The app is deployed at **[https://shopify-scraper-production-038d.up.railway.app](https://shopify-scraper-production-038d.up.railway.app)** via Railway.
+
+#### Redeploying (CLI)
+
+```bash
+railway login
+railway link
+railway up --detach
+```
+
+Railway auto-detects `Dockerfile` and `railway.toml` and handles the full build + deploy pipeline.
+
+#### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | Neon PostgreSQL connection string |
+| `PORT` | Server port (default: `8001`) |
+| `VITE_API_URL` | Public Railway URL for API calls |
+
+#### Local Development
 
 For a persistent API + Web UI on Railway:
 1. Add a `backend/` (FastAPI) and `frontend/` (React) to the project
@@ -178,41 +199,9 @@ For a persistent API + Web UI on Railway:
 
 ---
 
----
-
-## What Needs to Be Fixed
-
-### Track the CSV in Git
-
-The `data/` folder was never committed to the repository, so `git diff` finds nothing and the workflow skips every commit. The scraper **is working correctly** — it fetched 3,260 real rows on the last run — but the output file is invisible to git.
-
-**Fix:** Add `data/` to git and commit the current data file. Update `.gitignore` to only exclude `data/backups/` (the timestamped archives), not the main output CSV.
-
-### Fix the Diff Check
-
-The workflow currently uses `git diff --stat | grep "shopify_apps"` to detect changes. This is fragile because:
-- If the file isn't tracked, `git diff` always returns nothing
-- It only detects file changes, not content changes (e.g. a review count going from 100 → 120)
-
-**Fix:** After scraping, count the rows in the new CSV and compare against the committed file. Commit and notify only if the row count or content differs. E.g.:
-
-```bash
-NEW_COUNT=$(wc -l < "$OUTPUT_FILE")
-OLD_COUNT=$(wc -l < "$PREVIOUS_COMMITTED_FILE")
-if [ "$NEW_COUNT" != "$OLD_COUNT" ]; then
-  echo "changed=true" >> $GITHUB_OUTPUT
-fi
-```
-
-### The Scraper Is Working Correctly
-
-The last run scraped **3,260 apps** across 8 categories. This is a real result — the scraper is collecting more data than the stale 3,030 rows in the local CSV. Once the git tracking is fixed, these new results will be committed and the history will be accurate.
-
----
-
 ## Roadmap
 
-> Current status: Phase 1 in progress — see [Implementation Order](#implementation-order) below.
+> Current status: **All phases 1–6 complete** — see [Implementation Order](#implementation-order) below.
 
 ### Vision
 
@@ -220,7 +209,7 @@ Automated weekly scrape that commits clean CSV snapshots to GitHub, with a full 
 
 ---
 
-### Phase 1 — CSV Tracking + Backup `[in progress]`
+### Phase 1 — CSV Tracking + Backup `[complete]`
 
 Fix git tracking, improve the diff check, and add timestamped backups.
 
@@ -234,7 +223,7 @@ Fix git tracking, improve the diff check, and add timestamped backups.
 
 ---
 
-### Phase 2 — Scrape Log Table `[not started]`
+### Phase 2 — Scrape Log Table `[complete]`
 
 Track every scrape run in the database so the frontend can show history.
 
@@ -254,86 +243,75 @@ Track every scrape run in the database so the frontend can show history.
 
 ---
 
-### Phase 3 — Scrape Record Page `[not started]`
+### Phase 3 — Scrape Record Page `[complete]`
 
 A `/scrape-history` page showing the log of all scrape runs.
 
 **UI Elements:**
-- **Header card** — "Latest scrape: Apr 21 2026, 00:00 UTC — 3,030 apps across 8 categories — Success"
+- **Header card** — "Latest scrape: Apr 21 2026, 18:28 UTC — 3,260 apps across 8 categories — Success"
 - **Status badge** — Green/Yellow/Red based on `status`
 - **Scrape History table** — Columns: Date, Duration, Apps, Categories, Status. Clickable rows to drill into a specific run.
 - **Manual trigger button** — Button that POSTs to a GitHub Actions `workflow_dispatch` trigger
 
-**New API endpoints:**
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/scrape-runs` | GET | List all scrape runs, paginated |
-| `/api/scrape-runs/latest` | GET | Get the most recent run |
-| `/api/scrape-runs/{id}/apps` | GET | Get apps from a specific run |
-
 ---
 
-### Phase 4 — Home Page Redesign `[not started]`
+### Phase 4 — Home Page Redesign `[complete]`
 
 Replace the current stats dashboard with a richer status overview.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  🏠  Shopify App Explorer                   [Status ●]  │
-├─────────────────────────────────────────────────────────┤
-│  Latest Scrape: Sunday Apr 19 2026 · 3,030 apps         │
-│  [View History]  [Run Now]                             │
-├────────────────┬────────────────────────────────────────┤
-│  Total Apps    │  Categories Tracked                   │
-│  3,030         │  8                                    │
-├────────────────┴────────────────────────────────────────┤
-│  Quick Search: [________________] [Search Apps]         │
-├─────────────────────────────────────────────────────────┤
-│  Categories                                                │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐    │
-│  │ Search & Fil │ │ Sales Channel│ │ Product Rev  │    │
-│  │ 382 apps     │ │ 415 apps     │ │ 295 apps     │    │
-│  └──────────────┘ └──────────────┘ └──────────────┘    │
-└─────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│  Discover the Best Shopify Apps                             │
+│  Browse through 3,260+ apps from the Shopify App Store...  │
+│  [ Browse All Apps ]                                        │
+├────────────────────────────────────────────────────────────┤
+│  ● Latest scrape: Apr 21 2026, 18:28 UTC — 3,260 apps      │
+│    across 8 categories — Success          [View History]   │
+├────────────────────────────────────────────────────────────┤
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │ 3,260    │  │ 1,820    │  │ 247      │  │ 4.2      │  │
+│  │ Total    │  │ Free     │  │ Built for│  │ Avg      │  │
+│  │ Apps     │  │ Plans     │  │ Shopify  │  │ Rating   │  │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │
+└────────────────────────────────────────────────────────────┘
 ```
 
 **Changes:**
-- `frontend/src/pages/Home.jsx` — fetch latest run from `/api/scrape-runs/latest` and category counts from `/api/stats`
-- `frontend/src/App.jsx` — add route for `/scrape-history`
-- `frontend/src/api.js` — add `getScrapeRuns()`, `getLatestRun()`, `triggerScrape()`
+- `frontend/src/pages/Home.jsx` — hero section, colored scrape status banner (green/yellow/red), stats grid (Total Apps, Free Plans, Built for Shopify, Avg Rating), `/scrape-history` nav link
+- `frontend/src/App.jsx` — added route for `/scrape-history`
+- `frontend/src/api.js` — added `getScrapeRuns()`, `getLatestRun()`, `triggerScrape()`
 
 ---
 
-### Phase 5 — "Last Updated" Badges `[not started]`
+### Phase 5 — "Last Updated" Badges `[complete]`
 
 Show when the app data was last scraped.
 
-- `AppList.jsx` — show "Data from Apr 19 2026" banner at the top using `is_latest` run info
-- `AppDetail.jsx` — add "Last scraped: Apr 19 2026" on the app detail card
+- `AppList.jsx` — show "Data from Apr 21 2026" banner at the top using `is_latest` run info
+- `AppDetail.jsx` — add "Last scraped: Apr 21 2026" on the app detail card
 
 ---
 
-### Phase 6 — Optional: Sync to Neon `[not started]`
+### Phase 6 — Sync to Neon `[complete]`
 
-After committing the CSV to GitHub, optionally sync the latest data to Neon PostgreSQL for the web UI. This is a separate concern from the scraper pipeline — the CSV in GitHub is the source of truth.
+The scraped CSV data is synced to Neon PostgreSQL for the web UI. The Railway-deployed FastAPI backend reads from Neon, enabling the React frontend to query and filter 3,260+ apps in real time.
 
 **Changes:**
-- `.github/workflows/scrape.yml` — add step calling `python backend/import_data.py` after commit
-- `backend/import_data.py` — upsert apps into Neon, mark `is_latest` on `scrape_runs`
-- `.env.example` — add `DATABASE_URL` template, add as a GitHub Actions secret
+- `backend/database.py` — reads `DATABASE_URL` from environment (Neon connection string)
+- `backend/import_data.py` — upserts apps into Neon, marks `is_latest` on `scrape_runs`
+- `.github/workflows/scrape.yml` — added step calling `python backend/import_data.py` after commit
 
 ---
 
 ### Implementation Order
 
 ```
-Phase 1  → Fix git tracking + diff check + backup (standalone, no DB)
-Phase 2  → new scrape_runs table + model        (schema only)
-Phase 3  → /scrape-history page + API endpoints (frontend)
-Phase 4  → Home page redesign                  (frontend)
-Phase 5  → "last updated" badges               (frontend)
-Phase 6  → Optional: sync to Neon             (optional extension)
+Phase 1  → CSV tracking + backup                 ✓ complete
+Phase 2  → ScrapeRun schema + API endpoints     ✓ complete
+Phase 3  → ScrapeHistory page + nav link         ✓ complete
+Phase 4  → Home page redesign + scrape status    ✓ complete
+Phase 5  → "last updated" banners               ✓ complete
+Phase 6  → Sync to Neon                        ✓ complete
 ```
 
 ---
@@ -347,23 +325,24 @@ Shopify App Store
 GitHub Actions (Weekly Cron)
   ├─ scrape.py → data/shopify_apps_all_categories.csv
   ├─ git commit + push (if row count changed)
-  └─ copy to data/backups/YYYY-MM-DD_*.csv       ← Phase 1
+  └─ copy to data/backups/YYYY-MM-DD_*.csv
                 │
                 ▼
            GitHub Repository
            (CSV source of truth)
-           data/backups/ (local only, not committed)
+           data/backups/ (backup CSVs local-only, .gitkeep committed)
                 │
-                ▼  (optional)
+                ▼
            Neon PostgreSQL                         ← Phase 6
                 │
                 ▼
-         FastAPI Backend (port 8001)
+         FastAPI Backend (Railway, port 8001)
                 │
       ┌─────────┼─────────┐
       ▼         ▼         ▼
   /api/apps /api/stats /api/scrape-runs
                 │
                 ▼
-         React Frontend
+         React Frontend (Railway)
+         https://shopify-scraper-production-038d.up.railway.app
 ```
